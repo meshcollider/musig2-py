@@ -127,3 +127,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Files created by this project
+secret.key
+secret_nonces
+public_nonces
+public_keys
+s_values
