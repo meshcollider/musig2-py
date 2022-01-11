@@ -20,6 +20,8 @@ SECRET_KEY_FILE = 'secret.key'
 PUBLIC_KEY_LIST_FILE = 'public_keys'
 SECRET_NONCE_FILE = 'secret_nonces'
 PUBLIC_NONCE_LIST_FILE = 'public_nonces'
+MESSAGE_FILE = 'message'
+S_VALUES_FILE = 's_values'
 
 Point = Tuple[int, int]
 
@@ -150,7 +152,14 @@ def aggregate_public_keys(own_key: Optional[bytes] = None, negate: bool = False)
     print(f"Aggregate public key: {aggregate_key_bytes.hex()}")
     return aggregate_key_bytes, a_1
 
-def aggregate_nonces(nonce_list: list[list[bytes]]) -> list[Point]:
+def aggregate_nonces() -> list[Point]:
+    nonces_to_aggregate = read_bytes_from_hex_list(PUBLIC_NONCE_LIST_FILE)
+    if not nonces_to_aggregate:
+        print(f"Error: Public nonces are missing.")
+        quit()
+    # Every nu nonces are a set corresponding to one signer
+    nonce_list = [nonces_to_aggregate[i:i + nu] for i in range(0, len(nonces_to_aggregate), nu)]
+
     aggregated_nonces = []
     for j in range(nu):
         R_j = None
@@ -190,7 +199,8 @@ def participant_sign(chall: int, secret: bytes, coeff: int, nonce_secrets: list[
 
 def chall_hash(agg_pubkey: bytes, R: bytes, msg: bytes) -> int:
     bytes_to_hash = b'' + agg_pubkey + R + msg
-    hash_bytes = tagged_hash("musig2/sig", bytes_to_hash)
+    # Use the BIP-340 challenge hash so the final signature is a valid BIP-340 schnorr signature
+    hash_bytes = tagged_hash("BIP0340/challenge", bytes_to_hash)
     return int_from_bytes(hash_bytes)
 
 def verify_sig(aggregate_key_bytes: bytes, msg: bytes, R_bytes: bytes, s: int) -> bool:
@@ -227,6 +237,11 @@ def read_bytes_from_hex_list(filename: str) -> list[bytes]:
             hex_list.append(hex_bytes)
     return hex_list
 
+def get_message() -> bytes:
+    message = read_bytes(MESSAGE_FILE)
+    if not message:
+        quit()
+    return message
 
 def main():
     if len(sys.argv) < 2:
@@ -265,10 +280,7 @@ def main():
         quit()
 
     elif command == "sign":
-        message_file = 'message' if len(sys.argv) < 3 else sys.argv[2]
-        message = read_bytes(message_file)
-        if not message:
-            quit()
+        message = get_message()
 
         seckey = read_bytes(SECRET_KEY_FILE)
         if not seckey:
@@ -276,12 +288,7 @@ def main():
         pubkey = pubkey_gen(seckey)
 
         # Aggregate the nonces from all participants
-        nonces_to_aggregate = read_bytes_from_hex_list(PUBLIC_NONCE_LIST_FILE)
-        if not nonces_to_aggregate:
-            quit()
-        # Every nu nonces are a set corresponding to one signer
-        nonces_to_aggregate_split = [nonces_to_aggregate[i:i + nu] for i in range(0, len(nonces_to_aggregate), nu)]
-        aggregated_nonces = aggregate_nonces(nonces_to_aggregate_split)
+        aggregated_nonces = aggregate_nonces()
         (aggregate_key, a_1) = aggregate_public_keys(pubkey)
 
         nonce_secret_bytes = read_bytes(SECRET_NONCE_FILE)
@@ -296,30 +303,51 @@ def main():
         # Compute challenge
         c = chall_hash(aggregate_key, bytes_from_point(R), message)
 
-        # Sign
-        s_1 = participant_sign(c, seckey, a_1, nonce_secrets, b, not has_even_y(R))
-
-        print(f"Partial signature s_1: {s_1}")
         R_bytes = bytes_from_point(R)
         print(f"Signature R: {R_bytes.hex()}")
 
+        # Sign
+        s_1 = participant_sign(c, seckey, a_1, nonce_secrets, b, not has_even_y(R))
+        print(f"Partial signature s_1: {s_1}")
+
+
     elif command == "aggregatesignature":
         s = 0
-        with open('s_values', 'r') as f:
+        with open(S_VALUES_FILE, 'r') as f:
             for s_i in f:
                 s += int(s_i)
                 s %= n
-        print(f"Signature s: {s}")
+        s_bytes = bytes_from_int(s)
+
+        message = get_message()
+        aggregated_nonces = aggregate_nonces()
+        (aggregate_key, _) = aggregate_public_keys()
+        b = hash_nonces(aggregate_key, aggregated_nonces, message)
+        R = compute_R(aggregated_nonces, b)
+        R_bytes = bytes_from_point(R)
+
+        signature_bytes = R_bytes + s_bytes
+        print(f"Hex-encoded signature: {signature_bytes.hex()}")
 
     elif command == "verify":
-        if len(sys.argv) < 5:
-            print("Usage: verify [pubkey] [R] [s] [message_file]")
+        if len(sys.argv) < 4:
+            print("Usage: verify [pubkey] [signature]")
             quit()
+
         pubkey = bytes.fromhex(sys.argv[2])
-        R = bytes.fromhex(sys.argv[3])
-        s = int(sys.argv[4])
-        message_file = 'message' if len(sys.argv) < 6 else sys.argv[5]
-        message = read_bytes(message_file)
+        if len(pubkey) != 32:
+            print("Error: length of public key must be 32 bytes")
+            quit()
+
+        signature_bytes = bytes.fromhex(sys.argv[3])
+        if len(signature_bytes) != 64:
+            print("Error: length of signature must be 64 bytes")
+            quit()
+
+        message = get_message()
+
+        R = signature_bytes[0:32]
+        s = int_from_bytes(signature_bytes[32:64])
 
         valid = verify_sig(pubkey, message, R, s)
         print(f"Signature is valid: {valid}")
