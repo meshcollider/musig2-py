@@ -9,7 +9,7 @@ All public keys are encoded as 32 bytes, assuming a positive y coordinate, as in
 
 ```
 > python3 musig2.py keygen
-Your public key: f5c9424f7f553380f8aa6a4081c73443d51d914350649d0a9386f19a2d1dfbe0
+Your public key: 7b218d25a6bd910c5ef56fb383f64f1a9d739b6dbbfd9047a55b0dcb07e81f77
 ```
 
 This will create a file `secret.key` containing the secret key for the above public key. Keep this safe.
@@ -19,8 +19,8 @@ This will create a file `secret.key` containing the secret key for the above pub
 ```
 > python3 musig2.py noncegen
 Your nonces:
-e0a8d714013c81ad3c70941d6521a9745d7a2be579fe6eb59409cdd3caeb10ab
-4493266d431838d54e667dd2337b744a5dc79bb9ece40b6a89c85a0bce2347f1
+67bf76acb6e81f5aa14636d40e106a057a577544e0718894b1529d001a70e583
+ec82fd28ee5ece35242c7c87cc0e2ab7859989c373e57d4298b5ac0c519f4b26
 ```
 
 This will also create a file `secret_nonces` containing the secrets corresponding to these nonces.
@@ -30,9 +30,9 @@ This will also create a file `secret_nonces` containing the secrets correspondin
 4. Receive from all participants their public keys and create a file called `public_keys` containing all these keys (including your own). The order is not important. For example:
 
 ```
-f5c9424f7f553380f8aa6a4081c73443d51d914350649d0a9386f19a2d1dfbe0
-ba843eb2f7540fb38e44937b1cbd2a4c6d3ed7f8d637af9c9066f3ebaec50e7e
-90bec63c45bf27a6447d8f1395166a672353c2289d7484b42826527314da3bf9
+7b218d25a6bd910c5ef56fb383f64f1a9d739b6dbbfd9047a55b0dcb07e81f77
+e5cf328d2e2e46ad7fe2f354e8be6725e04ee067f66253581d496c4e5cc3a281
+4661bc027ad61d10e71fee19ddc62d14fdeebcf4b816a5bf267db76e8451dd72
 ```
 
 6. Generate the aggregate public key:
@@ -40,7 +40,8 @@ ba843eb2f7540fb38e44937b1cbd2a4c6d3ed7f8d637af9c9066f3ebaec50e7e
 ```
 > python3 musig2.py aggregatekeys
 Aggregating 3 public keys...
-Aggregate public key: 081845cea7b4fbdf02196e3cda12a33c46c78d9107f9a1902e96f1dd6fa35721
+Aggregate key has odd y, repeating with negated coefficients
+Aggregate public key: 6f62ba28b5100f756443156ec9389a77c16e35d6f18a2257cad0c515c8167bb9
 ```
 
 This public key does not depend on the nonces for this session, and will remain the same even if all participants delete their `secret_nonces` files and generate new nonces. This will be the final public key used for verification of the signature.
@@ -48,12 +49,12 @@ This public key does not depend on the nonces for this session, and will remain 
 5. Receive from all participants their nonces for this signing session, and create a file called `public_nonces` containing all these nonce pairs. The two nonces from each participant must be kept in order, but the order of the participants is not important. For example:
 
 ```
-e0a8d714013c81ad3c70941d6521a9745d7a2be579fe6eb59409cdd3caeb10ab
-4493266d431838d54e667dd2337b744a5dc79bb9ece40b6a89c85a0bce2347f1
-895a624dd471c190473bbd68f10a01e72740da503a7a4d03e880504b73298bf5
-6708ff5d15cc370c4c06e1f4dff9f0441d3a05b7274d11a41d158127ddf6bf23
-0c62430479df030971d5231df8bf13cb0a724fdf955aa682afd89d71c6fc8235
-e5d30f81aebfe03c476be55192d9b59d6c8888c2cd1ae8bd06ece0d1434e3aba
+67bf76acb6e81f5aa14636d40e106a057a577544e0718894b1529d001a70e583
+ec82fd28ee5ece35242c7c87cc0e2ab7859989c373e57d4298b5ac0c519f4b26
+53473efb5b7f1dfe163443c6441b83c8e7c2f44cff7f4bf5c97ce3e1452cee35
+b9f2455cea633b72f87550dd2597a58ce3b056fe62ef2506b0da2e840c715dab
+3ab97a73cca7529855cefb1ef6582c1f0f301ad085c8e131a15fe5f498aab0d5
+15b276a5c095426adf270fd03341d0550c4a8c683b5f3a842c41948ad624479b
 ```
 
 6. Create a file called `message` containing the message you wish to sign. The contents of the file are interpreted as bytes, not as a string. Then use the `sign` command to generate a partial signature.
@@ -63,17 +64,18 @@ e5d30f81aebfe03c476be55192d9b59d6c8888c2cd1ae8bd06ece0d1434e3aba
 hello world
 > python3 musig2.py sign
 Aggregating 3 public keys...
-Aggregate public key: 081845cea7b4fbdf02196e3cda12a33c46c78d9107f9a1902e96f1dd6fa35721
-Signature R: 543ed1228dc2b2b97a8505c5c4bbc7af804337ba63764dedb3253d841650908a
-Partial signature s_1: 25790076415926875293701632275920825069309645224975202011864494087233169488661
+Aggregate key has odd y, repeating with negated coefficients
+Aggregate public key: 6f62ba28b5100f756443156ec9389a77c16e35d6f18a2257cad0c515c8167bb9
+Signature R: b9315da361154b7b6aafcbfb78769f33e6b845f55b3ab9e9b9195e6efd5ec6c1
+Partial signature s_1: 50c7fe9e8f3430b60f57c28664f97bf2d246a24a913de79336697721743ccb04
 ```
 
 7. Send the partial signature `s_1` to all other parties and receive their partial signatures. Create a file called `s_values` containing all these partial signatures (order does not matter):
 
 ```
-70422816632651700204487150071800525577195829262243917568538125546269304740490
-52745170049204061921510945259991613865907364545401375100071360259398594491612
-25790076415926875293701632275920825069309645224975202011864494087233169488661
+50c7fe9e8f3430b60f57c28664f97bf2d246a24a913de79336697721743ccb04
+38ba61d221cf9d3fb36f8a1505681cc63a6714bc506c361404c5637ee87fd4ad
+89543057dde76bae8bedc2183cd92fe50ac37c05e045763d12b3e6986573e581
 ```
 
 8. Aggregate the partial signatures:

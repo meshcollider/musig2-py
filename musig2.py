@@ -177,23 +177,30 @@ def hash_nonces(agg_pubkey: bytes, nonces: list[Point], msg: bytes) -> int:
     hash_bytes = tagged_hash("musig2/non", bytes_to_hash)
     return int_from_bytes(hash_bytes)
 
-def compute_R(nonces: list[Point], b: int) -> Point:
+def compute_R(nonces: list[Point], b: int, negate: bool = False) -> Tuple[Point, bool]:
     R = None
     for j in range(nu):
-        R_j = point_mul(nonces[j], b**j)
+        coeff = (b**j) % n
+        if negate:
+            coeff = n - coeff
+        R_j = point_mul(nonces[j], coeff)
         R = point_add(R, R_j)
+    if not has_even_y(R):
+        # If we derived an R with an odd y coordinate, repeat but negate everything
+        return compute_R(nonces, b, True)
     assert not is_infinite(R)
-    return R
+    return R, negate
 
 def participant_sign(chall: int, secret: bytes, coeff: int, nonce_secrets: list[bytes], b: int, negate: bool = False) -> int:
-    s = chall * coeff
-    s *= int_from_bytes(secret)
+    # s = c*a_1*x_1 + \sum{ r_1,j * b^{j-1} }
+    s = chall * coeff * int_from_bytes(secret)
     s %= n
     for j in range(nu):
         r_1j = int_from_bytes(nonce_secrets[j])
+        b_coeff = (b**j) % n
         if negate:
-            r_1j = n - r_1j
-        s += (r_1j * b**j)
+            b_coeff = n - b_coeff
+        s += (r_1j * b_coeff)
         s %= n
     return s
 
@@ -288,7 +295,7 @@ def main():
         pubkey = pubkey_gen(seckey)
 
         # Aggregate the nonces from all participants
-        aggregated_nonces = aggregate_nonces()
+        aggregated_nonce_points = aggregate_nonces()
         (aggregate_key, a_1) = aggregate_public_keys(pubkey)
 
         nonce_secret_bytes = read_bytes(SECRET_NONCE_FILE)
@@ -297,8 +304,8 @@ def main():
         nonce_secrets = nonce_secret_bytes.split(b'\n')
 
         # Compute R
-        b = hash_nonces(aggregate_key, aggregated_nonces, message)
-        R = compute_R(aggregated_nonces, b)
+        b = hash_nonces(aggregate_key, aggregated_nonce_points, message)
+        R, negated = compute_R(aggregated_nonce_points, b)
 
         # Compute challenge
         c = chall_hash(aggregate_key, bytes_from_point(R), message)
@@ -307,23 +314,24 @@ def main():
         print(f"Signature R: {R_bytes.hex()}")
 
         # Sign
-        s_1 = participant_sign(c, seckey, a_1, nonce_secrets, b, not has_even_y(R))
-        print(f"Partial signature s_1: {s_1}")
+        s_1 = participant_sign(c, seckey, a_1, nonce_secrets, b, negated)
+        s_1_bytes = bytes_from_int(s_1)
+        print(f"Partial signature s_1: {s_1_bytes.hex()}")
 
 
     elif command == "aggregatesignature":
         s = 0
-        with open(S_VALUES_FILE, 'r') as f:
-            for s_i in f:
-                s += int(s_i)
+        s_bytes_list = read_bytes_from_hex_list(S_VALUES_FILE)
+        for s_i in s_bytes_list:
+                s += int_from_bytes(s_i)
                 s %= n
         s_bytes = bytes_from_int(s)
 
         message = get_message()
-        aggregated_nonces = aggregate_nonces()
+        aggregated_nonce_points = aggregate_nonces()
         (aggregate_key, _) = aggregate_public_keys()
-        b = hash_nonces(aggregate_key, aggregated_nonces, message)
-        R = compute_R(aggregated_nonces, b)
+        b = hash_nonces(aggregate_key, aggregated_nonce_points, message)
+        (R, _) = compute_R(aggregated_nonce_points, b)
         R_bytes = bytes_from_point(R)
 
         signature_bytes = R_bytes + s_bytes
