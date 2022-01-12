@@ -135,3 +135,4 @@ public_nonces
 public_keys
 s_values
 message
+musig2-test
