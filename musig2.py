@@ -252,7 +252,7 @@ def compute_R(nonces: list[Point], b: int, negate: bool = False) -> Tuple[Point,
     assert not is_infinite(R)
     return R, negate
 
-def compute_S(chall: int, secret: bytes, coeff: int, nonce_secrets: list[bytes], b: int, negate: bool = False) -> int:
+def compute_s(chall: int, secret: bytes, coeff: int, nonce_secrets: list[bytes], b: int, negate: bool = False) -> int:
     # s = c*a_1*x_1 + \sum{ r_1,j * b^{j-1} }
     s = (chall * coeff * int_from_bytes(secret)) % n
     for j in range(nu):
@@ -344,7 +344,7 @@ def main():
         print(f"Signature R: {R_bytes.hex()}")
 
         # Sign
-        s_1 = compute_S(c, seckey, a_1, nonce_secrets, b, negated)
+        s_1 = compute_s(c, seckey, a_1, nonce_secrets, b, negated)
         s_1_bytes = bytes_from_int(s_1)
         print(f"Partial signature s_1: {s_1_bytes.hex()}")
         quit()

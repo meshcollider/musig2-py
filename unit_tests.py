@@ -130,10 +130,38 @@ def test_compute_R():
     sys.stdout.write('\rtest_compute_R PASSED\n')
     sys.stdout.flush()
 
+def test_compute_s():
+    for _ in range(10):
+        random_privkey = m2.seckey_gen()
+        random_pubkey = m2.pubkey_gen(random_privkey)
+        random_chall = random.randint(1, m2.n - 1)
+        random_a_1 = random.randint(1, m2.n - 1)
+        random_b = random.randint(1, m2.n - 1)
+        our_R = None
+        nonce_secrets = []
+        for j in range(m2.nu):
+            r_1j = m2.seckey_gen()
+            nonce_secrets.append(r_1j)
+            R_1j = m2.pubkey_gen(r_1j)
+            bj_R_1j = m2.point_mul(m2.lift_x(R_1j), (random_b**j)%m2.n)
+            our_R = m2.point_add(our_R, bj_R_1j)
+        s = m2.compute_s(random_chall, random_privkey, random_a_1, nonce_secrets, random_b)
+        S = m2.point_mul(m2.G, s)
+        a_1_pubkey = m2.point_mul(m2.lift_x(random_pubkey), random_a_1)
+        c_a_1_pubkey = m2.point_mul(a_1_pubkey, random_chall)
+        S_check = m2.point_add(c_a_1_pubkey, our_R)
+        assert S == S_check
+
+        sys.stdout.write('.')
+        sys.stdout.flush()
+    sys.stdout.write('\rtest_compute_s PASSED\n')
+    sys.stdout.flush()
+
 
 if __name__ == "__main__":
     test_seckey_gen()
     test_read_write_bytes()
     test_compute_R()
+    test_compute_s()
     test_aggregate_nonces()
     test_aggregate_public_keys()
