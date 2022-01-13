@@ -1,7 +1,9 @@
 # musig2-py
 Experimental musig2 python code, not for production use! This is just for testing things out.
 
-All public keys are encoded as 32 bytes, assuming a positive y coordinate, as in BIP-340.
+All public keys are encoded as 32 bytes, assuming an even y coordinate, as in BIP-340.
+
+Signatures are 64 bytes. The first 32 bytes encode the x-coordinate of the point R (which is again assumed to have an even y coordinate). The second 32 bytes encode the integer s. This makes them compatible with BIP-340, and hence valid as BIP-341 Taproot Schnorr signatures.
 
 ## Usage
 
