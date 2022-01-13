@@ -52,7 +52,7 @@ def do_sign():
                     )
         stdout, _ = one.communicate()
         stdout = stdout.split(b'\n')
-        s_value = stdout[-3].split(b' ')[-1]
+        s_value = stdout[-2].split(b' ')[-1]
         global X
         X = stdout[-4].split(b' ')[-1].decode()
         s_values += s_value + b'\n'
