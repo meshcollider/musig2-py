@@ -90,3 +90,23 @@ Signature is valid: True
 
 The format for the verification command is
 `verify <public key> <signature>`
+
+## Testing
+
+This repository includes two types of tests. The unit tests are run on specific functions to ensure individual components are working correctly.
+```
+> python3 unit_tests.py
+test_seckey_gen PASSED
+test_read_write_bytes PASSED
+test_compute_R PASSED
+test_aggregate_nonces PASSED
+test_aggregate_public_keys PASSED
+```
+
+The functional tests run the code externally simulating multiple users in a key establishment and signing session.
+```
+> python3 functional_test.py
+X: ac4a3b78a1368de26f96346cdf87149a2e2d6201b14559120f73c78b1b8253c3
+S: 3d18300bbcac308f7f860cc263fe0cafd8a54c0b0a18c953b3f5884dd5012e03bcc45d03cab195223bc6bf98f85f7a4ac33a29eb1d46faac172aec9649cfa678
+Signature is valid: True
+```
