@@ -1,5 +1,5 @@
 import hashlib
-import os.path
+import os
 import secrets
 import sys
 from typing import Tuple, Optional
@@ -125,8 +125,7 @@ def read_bytes(filename: str) -> bytes:
 
 def write_bytes_list_to_hex(bytes_list: list[bytes], filename: str) -> bool:
     if os.path.isfile(filename):
-        print(f"File {filename} already exists, will not overwrite.")
-        return False
+        os.remove(filename)
     with open(filename, 'w') as f:
         for byte_string in bytes_list:
             if not f.write(f"{byte_string.hex()}\n") > 0:
@@ -293,6 +292,7 @@ def main():
     elif command == "noncegen":
         nonce_secrets = []
         nonces = []
+        print("WARNING: Only use these nonces once, then generate new ones.\nReusing nonces to sign different messages will leak your secret key.")
         print("Your nonces:")
         for _ in range(nu):
             # Generate a secret key
@@ -347,6 +347,8 @@ def main():
         s_1 = compute_s(c, seckey, a_1, nonce_secrets, b, negated)
         s_1_bytes = bytes_from_int(s_1)
         print(f"Partial signature s_1: {s_1_bytes.hex()}")
+
+        os.remove(SECRET_NONCE_FILE)
         quit()
 
     # Take a list of partial signatures and combine them into a valid signature under the aggregate public key
