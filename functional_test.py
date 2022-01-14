@@ -39,7 +39,7 @@ def gen_nonces():
                     )
         stdout, _ = one.communicate()
         stdout = stdout.split(b'\n')
-        nonces += b'\n'.join(stdout[1:])
+        nonces += b'\n'.join(stdout[3:])
     for child in children:
         musig2.write_bytes(nonces, f"musig2-test/{child}/public_nonces")
 
@@ -51,10 +51,10 @@ def do_sign():
                         stdout=subprocess.PIPE
                     )
         stdout, _ = one.communicate()
-        stdout = stdout.split(b'\n')
-        s_value = stdout[-2].split(b' ')[-1]
+        stdout = stdout.strip().split(b'\n')
+        s_value = stdout[-1].split(b' ')[-1]
         global X
-        X = stdout[-4].split(b' ')[-1].decode()
+        X = stdout[-3].split(b' ')[-1].decode()
         s_values += s_value + b'\n'
     for child in children:
         musig2.write_bytes(s_values, f"musig2-test/{child}/s_values")
@@ -66,7 +66,7 @@ def aggregate_signatures():
                 )
     stdout, _ = one.communicate()
     global sig
-    sig = stdout.split(b'\n')[-2].split(b' ')[-1].decode()
+    sig = stdout.strip().split(b'\n')[-1].split(b' ')[-1].decode()
 
 def do_verify():
     print(f"X: {X}")

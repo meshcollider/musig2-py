@@ -348,6 +348,7 @@ def main():
         s_1_bytes = bytes_from_int(s_1)
         print(f"Partial signature s_1: {s_1_bytes.hex()}")
 
+        # Delete the nonce secrets to ensure they are not reused multiple times
         os.remove(SECRET_NONCE_FILE)
         quit()
 
