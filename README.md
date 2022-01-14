@@ -1,5 +1,5 @@
 # musig2-py
-Experimental musig2 python code, not for production use! This is just for testing things out. As experimental code, please also expect it to change in breaking ways between commits.
+Experimental MuSig2 python code, not for production use! This is just for testing things out. As experimental code, please also expect it to change in breaking ways between commits.
 
 All public keys are encoded as 32 bytes, assuming an even y coordinate, as in BIP-340. Nonces consist of two such public keys concatenated, for 64 bytes in total.
 
