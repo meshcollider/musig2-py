@@ -74,14 +74,16 @@ def test_aggregate_nonces():
         nonces = []
         aggregated_nonces = [None for _ in range(m2.nu)]
         for _ in range(5):
+            nonce = b''
             for ind in range(m2.nu):
                 r_1j = m2.seckey_gen()
                 R_1j = m2.pubkey_gen(r_1j)
                 R_1j_check = m2.point_mul(m2.G, m2.int_from_bytes(r_1j))
                 assert R_1j_check == m2.lift_x(R_1j)
                 nonce_secrets.append(r_1j)
-                nonces.append(R_1j)
+                nonce += R_1j
                 aggregated_nonces[ind] = m2.point_add(aggregated_nonces[ind], R_1j_check)
+            nonces.append(nonce)
         assert m2.write_bytes_list_to_hex(nonce_secrets, 'test_aggregate_nonces')
         nonce_secrets_check = m2.read_bytes_from_hex_list('test_aggregate_nonces')
         os.remove('test_aggregate_nonces')
@@ -101,11 +103,13 @@ def test_compute_R():
         nonce_secrets = []
         # Simulate 5 participants, each with nu nonces
         for _ in range(5):
+            nonce = b''
             for _ in range(m2.nu):
                 r_1j = m2.seckey_gen()
                 R_1j = m2.pubkey_gen(r_1j)
                 nonce_secrets.append(r_1j)
-                nonces.append(R_1j)
+                nonce += R_1j
+            nonces.append(nonce)
         aggregate_nonce_points = m2.aggregate_nonces(nonces)
         b = m2.hash_nonces(random_pubkey, aggregate_nonce_points, b'hello world')
         R, negated = m2.compute_R(aggregate_nonce_points, b, False)

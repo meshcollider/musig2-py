@@ -16,7 +16,6 @@ G = (0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798, 0x483AD
 # 4 is proven secure for just AOMDL assumption.
 nu = 2
 
-
 ########## POINT FUNCTIONS ##########
 
 Point = Tuple[int, int]
@@ -102,7 +101,7 @@ SECRET_KEY_FILE = 'secret.key'
 PUBLIC_KEY_LIST_FILE = 'public_keys'
 SECRET_NONCE_FILE = 'secret_nonces'
 PUBLIC_NONCE_LIST_FILE = 'public_nonces'
-MESSAGE_FILE = 'message'
+DEFAULT_MESSAGE_FILE = 'message'
 S_VALUES_FILE = 's_values'
 
 def write_bytes(bytes_to_write: bytes, filename: str) -> bool:
@@ -146,8 +145,8 @@ def read_bytes_from_hex_list(filename: str) -> list[bytes]:
         quit()
     return hex_list
 
-def get_message() -> bytes:
-    message = read_bytes(MESSAGE_FILE)
+def get_message(filename: str) -> bytes:
+    message = read_bytes(filename)
     if not message:
         quit()
     return message
@@ -212,12 +211,12 @@ def aggregate_public_keys(public_key_list: list[bytes], own_key: Optional[bytes]
 
 def aggregate_nonces(nonces_to_aggregate: list[bytes]) -> list[Point]:
     # Every nu nonces are a set corresponding to one signer
-    nonce_list = [nonces_to_aggregate[i:i + nu] for i in range(0, len(nonces_to_aggregate), nu)]
     aggregated_nonces = []
     for j in range(nu):
         R_j = None
-        for nonces in nonce_list:
-            point = lift_x(nonces[j])
+        for combined_nonce in nonces_to_aggregate:
+            nonce_component = combined_nonce[32*j : 32*(j + 1)]
+            point = lift_x(nonce_component)
             R_j = point_add(R_j, point)
         assert not is_infinite(R_j)
         aggregated_nonces.append(R_j)
@@ -285,15 +284,15 @@ def main():
         if not write_bytes(seckey, SECRET_KEY_FILE):
             seckey = read_bytes(SECRET_KEY_FILE)
         pubkey = pubkey_gen(seckey)
-        print(f"Your public key: {pubkey.hex()}")
+        print(f"Your public key:\n{pubkey.hex()}")
         quit()
 
     # Generate some random nonces
     elif command == "noncegen":
         nonce_secrets = []
-        nonces = []
-        print("WARNING: Only use these nonces once, then generate new ones.\nReusing nonces to sign different messages will leak your secret key.")
-        print("Your nonces:")
+        nonces = b''
+        print("WARNING: Only use this nonce once, then generate a new one.")
+        print("Reusing nonces to sign different messages will leak your secret key.")
         for _ in range(nu):
             # Generate a secret key
             r_1j = seckey_gen()
@@ -301,9 +300,9 @@ def main():
             R_1j = pubkey_gen(r_1j)
             # Add this newly generated keypair to the lists
             nonce_secrets.append(r_1j)
-            nonces.append(R_1j)
+            nonces += R_1j
             # Print the public nonce
-            print(R_1j.hex())
+        print(f"Your new nonce:\n{nonces.hex()}")
         # Encode the nonce secrets as a newline-separated list
         write_bytes_list_to_hex(nonce_secrets, SECRET_NONCE_FILE)
         quit()
@@ -312,41 +311,49 @@ def main():
     elif command == "aggregatekeys":
         public_keys_list = read_bytes_from_hex_list(PUBLIC_KEY_LIST_FILE)
         combined_key, _ = aggregate_public_keys(public_keys_list, None, False)
-        print(f"Aggregate public key: {combined_key.hex()}")
+        print(f"Aggregate public key:\n{combined_key.hex()}")
         quit()
 
     # Generate a partial signature from our secret key w.r.t. the aggregated key and nonces
     elif command == "sign":
-        message = get_message()
+        if len(sys.argv) > 3:
+            print("Usage: sign [message_filename (optional)]")
+            quit()
+        elif len(sys.argv) == 3:
+            message_file = sys.argv[2]
+        else:
+            message_file = DEFAULT_MESSAGE_FILE
+        message = get_message(message_file)
         seckey = read_bytes(SECRET_KEY_FILE)
         pubkey = pubkey_gen(seckey)
 
         # Compute the aggregate public key
         public_keys_list = read_bytes_from_hex_list(PUBLIC_KEY_LIST_FILE)
         combined_key, a_1 = aggregate_public_keys(public_keys_list, pubkey, False)
+        print(f"Aggregate key:\n{combined_key.hex()}")
 
-        print(f"Aggregate key: {combined_key.hex()}")
-
-        # Aggregate the nonces from all participants
+        # Aggregate the nonces from all participants and compute R
         public_nonce_list = read_bytes_from_hex_list(PUBLIC_NONCE_LIST_FILE)
+        if len(public_nonce_list) != len(public_keys_list):
+            print("Error: mismatch between number of nonces and number of public keys.")
+            quit()
         aggregated_nonce_points = aggregate_nonces(public_nonce_list)
-
-        nonce_secrets = read_bytes_from_hex_list(SECRET_NONCE_FILE)
-
-        # Compute R
         b = hash_nonces(combined_key, aggregated_nonce_points, message)
         R, negated = compute_R(aggregated_nonce_points, b)
+        R_bytes = bytes_from_point(R)
+        print(f"Signature R:\n{R_bytes.hex()}")
 
         # Compute challenge
         c = chall_hash(combined_key, bytes_from_point(R), message)
 
-        R_bytes = bytes_from_point(R)
-        print(f"Signature R: {R_bytes.hex()}")
-
         # Sign
+        nonce_secrets = read_bytes_from_hex_list(SECRET_NONCE_FILE)
         s_1 = compute_s(c, seckey, a_1, nonce_secrets, b, negated)
         s_1_bytes = bytes_from_int(s_1)
-        print(f"Partial signature s_1: {s_1_bytes.hex()}")
+        print(f"Partial signature s_1:\n{s_1_bytes.hex()}")
+
+        with open(f"{message_file}.partsig", "w") as f:
+            f.write(f"{combined_key.hex()}\n{R_bytes.hex()}\n{s_1_bytes.hex()}\n")
 
         # Delete the nonce secrets to ensure they are not reused multiple times
         os.remove(SECRET_NONCE_FILE)
@@ -354,38 +361,34 @@ def main():
 
     # Take a list of partial signatures and combine them into a valid signature under the aggregate public key
     elif command == "aggregatesignature":
+        if len(sys.argv) > 3:
+            print("Usage: aggregatesignature [message_filename (optional)]")
+            quit()
+        elif len(sys.argv) == 3:
+            message_file = sys.argv[2]
+        else:
+            message_file = DEFAULT_MESSAGE_FILE
+        message = get_message(message_file)
+
         # Sum the partial signature values from all signers
         s = 0
-        s_bytes_list = read_bytes_from_hex_list(S_VALUES_FILE)
-        for s_i in s_bytes_list:
+        sig_bytes_list = read_bytes_from_hex_list(S_VALUES_FILE)
+        for s_i in sig_bytes_list:
                 s += int_from_bytes(s_i)
                 s %= n
         s_bytes = bytes_from_int(s)
 
-        # Get the message
-        message = get_message()
-
-        # Generate the aggregated nonce points from the nonce list
-        public_nonce_list = read_bytes_from_hex_list(PUBLIC_NONCE_LIST_FILE)
-        aggregated_nonce_points = aggregate_nonces(public_nonce_list)
-
-        # Generate the aggregate public key from the public key list
-        public_keys_list = read_bytes_from_hex_list(PUBLIC_KEY_LIST_FILE)
-        combined_key, _ = aggregate_public_keys(public_keys_list, None, False)
-
-        # Compute R
-        b = hash_nonces(combined_key, aggregated_nonce_points, message)
-        (R, _) = compute_R(aggregated_nonce_points, b)
-        R_bytes = bytes_from_point(R)
-
+        # Retrieve the R value from the partsig file
+        partsig_bytes_list = read_bytes_from_hex_list(f"{message_file}.partsig")
+        R_bytes = partsig_bytes_list[1]
         # Combine to produce the final signature
         signature_bytes = R_bytes + s_bytes
-        print(f"Hex-encoded signature: {signature_bytes.hex()}")
+        print(f"Hex-encoded signature:\n{signature_bytes.hex()}")
         quit()
 
     elif command == "verify":
-        if len(sys.argv) < 4:
-            print("Usage: verify [pubkey] [signature]")
+        if len(sys.argv) < 4 or len(sys.argv) > 5:
+            print("Usage: verify [pubkey] [signature] [message_filename (optional)]")
             quit()
 
         pubkey = bytes.fromhex(sys.argv[2])
@@ -398,7 +401,11 @@ def main():
             print("Error: length of signature must be 64 bytes")
             quit()
 
-        message = get_message()
+        if len(sys.argv) == 5:
+            message_file = sys.argv[4]
+        else:
+            message_file = DEFAULT_MESSAGE_FILE
+        message = get_message(message_file)
 
         R = signature_bytes[0:32]
         s = int_from_bytes(signature_bytes[32:64])

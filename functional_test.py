@@ -25,8 +25,8 @@ def gen_pub_keys():
                         stdout=subprocess.PIPE
                     )
         stdout, _ = one.communicate()
-        pubkey = stdout.split(b' ')[-1]
-        keys += pubkey
+        pubkey = stdout.strip().split(b'\n')[-1]
+        keys += pubkey + b'\n'
     for child in children:
         musig2.write_bytes(keys, f"musig2-test/{child}/public_keys")
 
@@ -38,8 +38,8 @@ def gen_nonces():
                         stdout=subprocess.PIPE
                     )
         stdout, _ = one.communicate()
-        stdout = stdout.split(b'\n')
-        nonces += b'\n'.join(stdout[3:])
+        stdout = stdout.strip().split(b'\n')
+        nonces += stdout[-1] + b'\n'
     for child in children:
         musig2.write_bytes(nonces, f"musig2-test/{child}/public_nonces")
 
@@ -52,9 +52,9 @@ def do_sign():
                     )
         stdout, _ = one.communicate()
         stdout = stdout.strip().split(b'\n')
-        s_value = stdout[-1].split(b' ')[-1]
+        s_value = stdout[-1]
         global X
-        X = stdout[-3].split(b' ')[-1].decode()
+        X = stdout[-5].decode()
         s_values += s_value + b'\n'
     for child in children:
         musig2.write_bytes(s_values, f"musig2-test/{child}/s_values")
@@ -87,8 +87,6 @@ def main():
     do_sign()
     aggregate_signatures()
     do_verify()
-
-
 
 
 
