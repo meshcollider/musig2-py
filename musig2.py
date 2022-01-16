@@ -158,19 +158,28 @@ def tagged_hash(tag: str, msg: bytes) -> bytes:
     tag_hash = hashlib.sha256(tag.encode()).digest()
     return hashlib.sha256(tag_hash + tag_hash + msg).digest()
 
+# Returns true if public_key is the second unique key in key_list
+def is_second_unique_key(key_list, public_key):
+    for key in key_list:
+        if key != key_list[0]:
+            if key == public_key:
+                return True
+            else:
+                return False
+    return False
+
 # Takes a list of public keys, and another key, and creates the aggregation coefficient for that key
 def key_agg_coeff(key_set: list[bytes], public_key: bytes) -> int:
     # Sort the set of keys in lexicographical order
     sorted_keys = sorted(key_set)
-    # Join the list of bytes as one byte string
-    key_set_bytes = b''.join(sorted_keys)
-    # Append the public key this coefficient is for
-    key_set_bytes += public_key
-    # Compute the tagged hash of the keys
-    hash_bytes = tagged_hash("musig2/agg", key_set_bytes)
-    coefficient = int_from_bytes(hash_bytes)
-    # Ensure that the coefficient is within the group order
-    assert 1 <= coefficient and coefficient < n
+    # If this is the second unique key in the list, we optimise by using coefficient 1
+    if is_second_unique_key(sorted_keys, public_key):
+        return 1
+    # Compute the hash of the sorted key list
+    L = tagged_hash("KeyAgg list", b''.join(sorted_keys))
+    hash_bytes = tagged_hash("KeyAgg coefficient", L + public_key)
+    # Convert the coefficient to an integer modulo the curve order
+    coefficient = int_from_bytes(hash_bytes) % n
     return coefficient
 
 ########## MUSIG2 FUNCTIONS ##########
