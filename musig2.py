@@ -62,18 +62,31 @@ def int_from_bytes(b: bytes) -> int:
 def bytes_from_int(x: int) -> bytes:
     return x.to_bytes(32, byteorder="big")
 
-def bytes_from_point(P: Point) -> bytes:
-    return bytes_from_int(x(P))
+def bytes_from_point(P: Point, compressed: bool = False) -> bytes:
+    x_coord = bytes_from_int(x(P))
+    if compressed:
+        if has_even_y(P):
+            return b'\x02' + x_coord
+        else:
+            return b'\x03' + x_coord
+    return x_coord
 
 def lift_x(b: bytes) -> Optional[Point]:
-    x = int_from_bytes(b)
+    if len(b) == 32:
+        x = int_from_bytes(b)
+        even = True
+    else:
+        x = int_from_bytes(b[1:])
+        even = (b[0] == '\x02')
     if x >= p:
         return None
     y_sq = (pow(x, 3, p) + 7) % p
     y = pow(y_sq, (p + 1) // 4, p)
     if pow(y, 2, p) != y_sq:
         return None
-    return (x, y if y & 1 == 0 else p-y)
+    if (even and y & 1 != 0) or (not even and y & 1 == 0):
+        y = p - y
+    return (x, y)
 
 def pubkey_gen(seckey: bytes) -> bytes:
     d0 = int_from_bytes(seckey)
