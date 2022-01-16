@@ -244,7 +244,7 @@ def hash_nonces(agg_pubkey: bytes, nonces: list[bytes], msg: bytes) -> int:
     return b
 
 def chall_hash(agg_pubkey: bytes, R: bytes, msg: bytes) -> int:
-    bytes_to_hash = b'' + agg_pubkey + R + msg
+    bytes_to_hash = b'' + R + agg_pubkey + msg
     # Use the BIP-340 challenge hash so the final signature is a valid BIP-340 schnorr signature
     hash_bytes = tagged_hash("BIP0340/challenge", bytes_to_hash)
     return int_from_bytes(hash_bytes)
