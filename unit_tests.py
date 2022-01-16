@@ -111,7 +111,8 @@ def test_compute_R():
                 nonce += R_1j
             nonces.append(nonce)
         aggregate_nonce_points = m2.aggregate_nonces(nonces)
-        b = m2.hash_nonces(random_pubkey, aggregate_nonce_points, b'hello world')
+        aggregated_nonce_bytes = [m2.bytes_from_point(R) for R in aggregate_nonce_points]
+        b = m2.hash_nonces(random_pubkey, aggregated_nonce_bytes, b'hello world')
         R, negated = m2.compute_R(aggregate_nonce_points, b, False)
 
         secret_check = 0

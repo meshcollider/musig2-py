@@ -231,13 +231,11 @@ def aggregate_nonces(nonces_to_aggregate: list[bytes]) -> list[Point]:
         aggregated_nonces.append(R_j)
     return aggregated_nonces
 
-def hash_nonces(agg_pubkey: bytes, nonces: list[Point], msg: bytes) -> int:
-    bytes_to_hash = agg_pubkey
-    for nonce in nonces:
-        bytes_to_hash += bytes_from_point(nonce)
-    bytes_to_hash += msg
-    hash_bytes = tagged_hash("musig2/non", bytes_to_hash)
-    return int_from_bytes(hash_bytes)
+def hash_nonces(agg_pubkey: bytes, nonces: list[bytes], msg: bytes) -> int:
+    bytes_to_hash = b''.join(nonces) + agg_pubkey + msg
+    hash_bytes = tagged_hash("MuSig/noncecoef", bytes_to_hash)
+    b = int_from_bytes(hash_bytes) % n
+    return b
 
 def chall_hash(agg_pubkey: bytes, R: bytes, msg: bytes) -> int:
     bytes_to_hash = b'' + agg_pubkey + R + msg
@@ -347,7 +345,8 @@ def main():
             print("Error: mismatch between number of nonces and number of public keys.")
             quit()
         aggregated_nonce_points = aggregate_nonces(public_nonce_list)
-        b = hash_nonces(combined_key, aggregated_nonce_points, message)
+        aggregated_nonce_bytes = [bytes_from_point(R) for R in aggregated_nonce_points]
+        b = hash_nonces(combined_key, aggregated_nonce_bytes, message)
         R, negated = compute_R(aggregated_nonce_points, b)
         R_bytes = bytes_from_point(R)
         print(f"Signature R:\n{R_bytes.hex()}")
