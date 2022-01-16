@@ -271,7 +271,7 @@ def verify_sig(aggregate_key_bytes: bytes, msg: bytes, R_bytes: bytes, s: int) -
     left = point_mul(G, s)
     R = lift_x(R_bytes)
     aggregate_key = lift_x(aggregate_key_bytes)
-    c = chall_hash(R_bytes, aggregate_key_bytes, msg)
+    c = chall_hash(aggregate_key_bytes, R_bytes, msg)
     right = point_add(R, point_mul(aggregate_key, c))
     return left == right
 
@@ -352,7 +352,7 @@ def main():
         print(f"Signature R:\n{R_bytes.hex()}")
 
         # Compute challenge
-        c = chall_hash(R_bytes, combined_key_bytes, message)
+        c = chall_hash(combined_key_bytes, R_bytes, message)
 
         # Sign
         nonce_secrets = read_bytes_from_hex_list(SECRET_NONCE_FILE)
