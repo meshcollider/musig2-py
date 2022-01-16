@@ -77,24 +77,24 @@ def lift_x(b: bytes) -> Optional[Point]:
         even = True
     else:
         x = int_from_bytes(b[1:])
-        even = (b[0] == '\x02')
+        even = (b[0] == 2)
     if x >= p:
         return None
     y_sq = (pow(x, 3, p) + 7) % p
     y = pow(y_sq, (p + 1) // 4, p)
     if pow(y, 2, p) != y_sq:
         return None
-    if (even and y & 1 != 0) or (not even and y & 1 == 0):
+    if (even and y & 1 != 0) or ((not even) and y & 1 == 0):
         y = p - y
     return (x, y)
 
-def pubkey_gen(seckey: bytes) -> bytes:
+def pubkey_gen(seckey: bytes, compressed: bool = False) -> bytes:
     d0 = int_from_bytes(seckey)
     if not (1 <= d0 <= n - 1):
         raise ValueError('The secret key must be an integer in the range 1..n-1.')
     P = point_mul(G, d0)
     assert P is not None
-    return bytes_from_point(P)
+    return bytes_from_point(P, compressed)
 
 def seckey_gen() -> bytes:
     # choose random integer below the order of the curve
@@ -197,16 +197,12 @@ def key_agg_coeff(key_set: list[bytes], public_key: bytes) -> int:
 
 ########## MUSIG2 FUNCTIONS ##########
 
-def aggregate_public_keys(public_key_list: list[bytes], own_key: Optional[bytes], negate: bool) -> Tuple[bytes, int]:
+def aggregate_public_keys(public_key_list: list[bytes], own_key: Optional[bytes]) -> Tuple[Point, int]:
     aggregate_key = None
     own_coeff = 0
     for key_bytes in public_key_list:
         # a_i is an integer coefficient
         a_i = key_agg_coeff(public_key_list, key_bytes)
-        # negate defines whether we need to negate all the a_i coefficients
-        # to ensure the resulting key has an even y coordinate
-        if negate:
-            a_i = n - a_i
         # If this key is the one specified, save the coefficient to return
         # This also ensures the key specified is actually part of the list
         if own_key == key_bytes:
@@ -221,15 +217,9 @@ def aggregate_public_keys(public_key_list: list[bytes], own_key: Optional[bytes]
         # Add the resulting point to our sum
         aggregate_key = point_add(aggregate_key, a_i_pk)
         assert not is_infinite(aggregate_key)
-    if not has_even_y(aggregate_key):
-        # If we have already tried negating the coefficients then something has definitely gone wrong
-        assert not negate
-        return aggregate_public_keys(public_key_list, own_key, True)
     if own_key is not None:
         assert own_coeff > 0
-    aggregate_key_bytes = bytes_from_point(aggregate_key)
-    assert aggregate_key_bytes
-    return aggregate_key_bytes, own_coeff
+    return aggregate_key, own_coeff
 
 def aggregate_nonces(nonces_to_aggregate: list[bytes]) -> list[Point]:
     # Every nu nonces are a set corresponding to one signer
@@ -237,10 +227,13 @@ def aggregate_nonces(nonces_to_aggregate: list[bytes]) -> list[Point]:
     for j in range(nu):
         R_j = None
         for combined_nonce in nonces_to_aggregate:
-            nonce_component = combined_nonce[32*j : 32*(j + 1)]
+            nonce_component = combined_nonce[33*j : 33*(j + 1)]
             point = lift_x(nonce_component)
             R_j = point_add(R_j, point)
-        assert not is_infinite(R_j)
+        if is_infinite(R_j):
+            # From spec: there is at least one dishonest signer (except with negligible probability).
+            # Continue with arbitrary use of point G so the dishonest signer can be caught later
+            R_j = G
         aggregated_nonces.append(R_j)
     return aggregated_nonces
 
@@ -256,28 +249,20 @@ def chall_hash(agg_pubkey: bytes, R: bytes, msg: bytes) -> int:
     hash_bytes = tagged_hash("BIP0340/challenge", bytes_to_hash)
     return int_from_bytes(hash_bytes)
 
-def compute_R(nonces: list[Point], b: int, negate: bool = False) -> Tuple[Point, bool]:
+def compute_R(nonces: list[Point], b: int) -> Point:
     R = None
     for j in range(nu):
-        coeff = (b**j) % n
-        if negate:
-            coeff = n - coeff
-        R_j = point_mul(nonces[j], coeff)
+        R_j = point_mul(nonces[j], (b**j) % n)
         R = point_add(R, R_j)
-    if not has_even_y(R):
-        # If we derived an R with an odd y coordinate, repeat but negate everything
-        return compute_R(nonces, b, True)
     assert not is_infinite(R)
-    return R, negate
+    return R
 
-def compute_s(chall: int, secret: bytes, coeff: int, nonce_secrets: list[bytes], b: int, negate: bool = False) -> int:
+def compute_s(chall: int, secret: bytes, coeff: int, nonce_secrets: list[bytes], b: int) -> int:
     # s = c*a_1*x_1 + \sum{ r_1,j * b^{j-1} }
     s = (chall * coeff * int_from_bytes(secret)) % n
     for j in range(nu):
         r_1j = int_from_bytes(nonce_secrets[j])
         b_coeff = (b**j) % n
-        if negate:
-            b_coeff = n - b_coeff
         s += (r_1j * b_coeff)
         s %= n
     return s
@@ -286,7 +271,7 @@ def verify_sig(aggregate_key_bytes: bytes, msg: bytes, R_bytes: bytes, s: int) -
     left = point_mul(G, s)
     R = lift_x(R_bytes)
     aggregate_key = lift_x(aggregate_key_bytes)
-    c = chall_hash(aggregate_key_bytes, R_bytes, msg)
+    c = chall_hash(R_bytes, aggregate_key_bytes, msg)
     right = point_add(R, point_mul(aggregate_key, c))
     return left == right
 
@@ -316,8 +301,8 @@ def main():
         for _ in range(nu):
             # Generate a secret key
             r_1j = seckey_gen()
-            # R_1j will always have even y coordinate
-            R_1j = pubkey_gen(r_1j)
+            # R_1j will be in 33-byte compressed key form with a parity byte
+            R_1j = pubkey_gen(r_1j, compressed = True)
             # Add this newly generated keypair to the lists
             nonce_secrets.append(r_1j)
             nonces += R_1j
@@ -330,8 +315,9 @@ def main():
     # Compute the aggregate public key
     elif command == "aggregatekeys":
         public_keys_list = read_bytes_from_hex_list(PUBLIC_KEY_LIST_FILE)
-        combined_key, _ = aggregate_public_keys(public_keys_list, None, False)
-        print(f"Aggregate public key:\n{combined_key.hex()}")
+        combined_key, _ = aggregate_public_keys(public_keys_list, None)
+        combined_key_bytes = bytes_from_point(combined_key)
+        print(f"Aggregate public key:\n{combined_key_bytes.hex()}")
         quit()
 
     # Generate a partial signature from our secret key w.r.t. the aggregated key and nonces
@@ -349,8 +335,9 @@ def main():
 
         # Compute the aggregate public key
         public_keys_list = read_bytes_from_hex_list(PUBLIC_KEY_LIST_FILE)
-        combined_key, a_1 = aggregate_public_keys(public_keys_list, pubkey, False)
-        print(f"Aggregate key:\n{combined_key.hex()}")
+        combined_key, a_1 = aggregate_public_keys(public_keys_list, pubkey)
+        combined_key_bytes = bytes_from_point(combined_key)
+        print(f"Aggregate key:\n{combined_key_bytes.hex()}")
 
         # Aggregate the nonces from all participants and compute R
         public_nonce_list = read_bytes_from_hex_list(PUBLIC_NONCE_LIST_FILE)
@@ -358,23 +345,28 @@ def main():
             print("Error: mismatch between number of nonces and number of public keys.")
             quit()
         aggregated_nonce_points = aggregate_nonces(public_nonce_list)
-        aggregated_nonce_bytes = [bytes_from_point(R) for R in aggregated_nonce_points]
-        b = hash_nonces(combined_key, aggregated_nonce_bytes, message)
-        R, negated = compute_R(aggregated_nonce_points, b)
+        aggregated_nonce_bytes = [bytes_from_point(R, compressed = True) for R in aggregated_nonce_points]
+        b = hash_nonces(combined_key_bytes, aggregated_nonce_bytes, message)
+        R = compute_R(aggregated_nonce_points, b)
         R_bytes = bytes_from_point(R)
         print(f"Signature R:\n{R_bytes.hex()}")
 
         # Compute challenge
-        c = chall_hash(combined_key, bytes_from_point(R), message)
+        c = chall_hash(R_bytes, combined_key_bytes, message)
 
         # Sign
         nonce_secrets = read_bytes_from_hex_list(SECRET_NONCE_FILE)
-        s_1 = compute_s(c, seckey, a_1, nonce_secrets, b, negated)
+        if not has_even_y(R):
+            # Negate all the nonce secrets if the R value has an odd y coordinate
+            nonce_secrets = [bytes_from_int(n - int_from_bytes(r)) for r in nonce_secrets]
+        if not has_even_y(combined_key):
+            seckey = bytes_from_int(n - int_from_bytes(seckey))
+        s_1 = compute_s(c, seckey, a_1, nonce_secrets, b)
         s_1_bytes = bytes_from_int(s_1)
         print(f"Partial signature s_1:\n{s_1_bytes.hex()}")
 
         with open(f"{message_file}.partsig", "w") as f:
-            f.write(f"{combined_key.hex()}\n{R_bytes.hex()}\n{s_1_bytes.hex()}\n")
+            f.write(f"{combined_key_bytes.hex()}\n{R_bytes.hex()}\n{s_1_bytes.hex()}\n")
 
         # Delete the nonce secrets to ensure they are not reused multiple times
         os.remove(SECRET_NONCE_FILE)

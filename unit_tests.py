@@ -38,7 +38,7 @@ def test_aggregate_public_keys():
         coeffs = []
         for _ in range(5):
             sec_i = m2.seckey_gen()
-            secrets.append(sec_i)
+            secrets.append(m2.int_from_bytes(sec_i))
             pub_i = m2.pubkey_gen(sec_i)
             pubkeys.append(pub_i)
         with open('test_aggregate_public_keys', 'w') as f:
@@ -47,7 +47,7 @@ def test_aggregate_public_keys():
         public_keys_list = m2.read_bytes_from_hex_list('test_aggregate_public_keys')
         combined_key = None
         for k in pubkeys:
-            ck, coeff_i = m2.aggregate_public_keys(public_keys_list, k, False)
+            ck, coeff_i = m2.aggregate_public_keys(public_keys_list, k)
             if combined_key is None:
                 combined_key = ck
             else:
@@ -56,11 +56,12 @@ def test_aggregate_public_keys():
         assert not m2.is_infinite(combined_key)
         combined_sec = 0
         for sec, coeff in zip(secrets, coeffs):
-            combined_sec += m2.int_from_bytes(sec) * coeff
+            if m2.has_even_y(combined_key):
+                sec = m2.n - sec
+            combined_sec += sec * coeff
             combined_sec %= m2.n
         pubkey_check = m2.point_mul(m2.G, combined_sec)
-        assert m2.has_even_y(pubkey_check)
-        assert m2.bytes_from_point(pubkey_check) == combined_key
+        assert m2.bytes_from_point(pubkey_check) == m2.bytes_from_point(combined_key)
         os.remove('test_aggregate_public_keys')
         sys.stdout.write('.')
         sys.stdout.flush()
@@ -77,7 +78,7 @@ def test_aggregate_nonces():
             nonce = b''
             for ind in range(m2.nu):
                 r_1j = m2.seckey_gen()
-                R_1j = m2.pubkey_gen(r_1j)
+                R_1j = m2.pubkey_gen(r_1j, compressed = True)
                 R_1j_check = m2.point_mul(m2.G, m2.int_from_bytes(r_1j))
                 assert R_1j_check == m2.lift_x(R_1j)
                 nonce_secrets.append(r_1j)
@@ -106,29 +107,26 @@ def test_compute_R():
             nonce = b''
             for _ in range(m2.nu):
                 r_1j = m2.seckey_gen()
-                R_1j = m2.pubkey_gen(r_1j)
+                R_1j = m2.pubkey_gen(r_1j, compressed = True)
                 nonce_secrets.append(r_1j)
                 nonce += R_1j
             nonces.append(nonce)
         aggregate_nonce_points = m2.aggregate_nonces(nonces)
-        aggregated_nonce_bytes = [m2.bytes_from_point(R) for R in aggregate_nonce_points]
+        aggregated_nonce_bytes = [m2.bytes_from_point(R, compressed = True) for R in aggregate_nonce_points]
         b = m2.hash_nonces(random_pubkey, aggregated_nonce_bytes, b'hello world')
-        R, negated = m2.compute_R(aggregate_nonce_points, b, False)
+        R = m2.compute_R(aggregate_nonce_points, b)
 
         secret_check = 0
         for p in range(5):
             for n in range(m2.nu):
-                secret_check += m2.int_from_bytes(nonce_secrets[m2.nu*p + n]) * (b**n)
+                nonce_secret = m2.int_from_bytes(nonce_secrets[m2.nu*p + n])
+                if not m2.has_even_y(R):
+                    nonce_secret = m2.n - nonce_secret
+                secret_check += nonce_secret * (b**n)
                 secret_check %= m2.n
 
         R_check = m2.point_mul(m2.G, secret_check)
         assert m2.bytes_from_point(R) == m2.bytes_from_point(R_check)
-        if negated:
-            assert not m2.has_even_y(R_check)
-            assert R != R_check
-        else:
-            assert m2.has_even_y(R_check)
-            assert R == R_check
 
         sys.stdout.write('.')
         sys.stdout.flush()
@@ -166,7 +164,7 @@ def test_compute_s():
 if __name__ == "__main__":
     test_seckey_gen()
     test_read_write_bytes()
+    test_aggregate_public_keys()
+    test_aggregate_nonces()
     test_compute_R()
     test_compute_s()
-    test_aggregate_nonces()
-    test_aggregate_public_keys()
