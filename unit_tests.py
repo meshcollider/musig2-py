@@ -14,7 +14,10 @@ def test_seckey_gen():
         assert m2.has_even_y(pubkey_check)
         assert m2.lift_x(m2.bytes_from_point(pubkey_check)) == pubkey_check
         assert m2.bytes_from_point(pubkey_check) == pubkey
-    print("test_seckey_gen PASSED")
+        sys.stdout.write('.')
+        sys.stdout.flush()
+    sys.stdout.write('\rtest_seckey_gen PASSED\n')
+    sys.stdout.flush()
 
 def test_read_write_bytes():
     for _ in range(10):
@@ -29,7 +32,33 @@ def test_read_write_bytes():
         read_bytes_list = m2.read_bytes_from_hex_list('test_read_hex_list')
         assert read_bytes_list == bytes_list
         os.remove('test_read_hex_list')
-    print("test_read_write_bytes PASSED")
+        sys.stdout.write('.')
+        sys.stdout.flush()
+    sys.stdout.write('\rtest_read_write_bytes PASSED\n')
+    sys.stdout.flush()
+
+def test_point_serialisation():
+    for _ in range(10):
+        seckey = m2.seckey_gen()
+        pubkey = m2.pubkey_gen(seckey)
+        pubkey_point = m2.lift_x(pubkey)
+        xonly_pubkey = m2.bytes_from_point(pubkey_point)
+        assert xonly_pubkey == pubkey
+
+        seckey = m2.seckey_gen(force_even_y=False)
+        pubkey = m2.pubkey_gen(seckey, compressed=True)
+        pubkey_point = m2.lift_x(pubkey)
+        pubkey_check = m2.point_mul(m2.G, m2.int_from_bytes(seckey))
+        assert pubkey_check == pubkey_point
+        compressed_pubkey = m2.bytes_from_point(pubkey_point, compressed=True)
+        assert compressed_pubkey == pubkey
+        xonly_pubkey = m2.bytes_from_point(pubkey_point)
+        assert xonly_pubkey == compressed_pubkey[1:]
+
+        sys.stdout.write('.')
+        sys.stdout.flush()
+    sys.stdout.write('\rtest_point_serialisation PASSED\n')
+    sys.stdout.flush()
 
 def test_aggregate_public_keys():
     for _ in range(5):
@@ -164,6 +193,7 @@ def test_compute_s():
 if __name__ == "__main__":
     test_seckey_gen()
     test_read_write_bytes()
+    test_point_serialisation()
     test_aggregate_public_keys()
     test_aggregate_nonces()
     test_compute_R()
