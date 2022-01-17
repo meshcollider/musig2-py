@@ -113,6 +113,7 @@ This repository includes two types of tests. The unit tests are run on specific 
 > python3 unit_tests.py
 test_seckey_gen PASSED
 test_read_write_bytes PASSED
+test_point_serialisation PASSED
 test_aggregate_public_keys PASSED
 test_aggregate_nonces PASSED
 test_compute_R PASSED
