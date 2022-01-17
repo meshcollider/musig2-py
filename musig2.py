@@ -96,12 +96,12 @@ def pubkey_gen(seckey: bytes, compressed: bool = False) -> bytes:
     assert P is not None
     return bytes_from_point(P, compressed)
 
-def seckey_gen() -> bytes:
+def seckey_gen(force_even_y: bool = True) -> bytes:
     # choose random integer below the order of the curve
     seckey_int = secrets.randbelow(n)
     # Check that this int gives a public key with even y
     P = point_mul(G, seckey_int)
-    if not has_even_y(P):
+    if force_even_y and not has_even_y(P):
         seckey_int = n - seckey_int
     # Convert it to bytes
     seckey_bytes = bytes_from_int(seckey_int)
@@ -300,7 +300,7 @@ def main():
         print("Reusing nonces to sign different messages will leak your secret key.")
         for _ in range(nu):
             # Generate a secret key
-            r_1j = seckey_gen()
+            r_1j = seckey_gen(force_even_y = False)
             # R_1j will be in 33-byte compressed key form with a parity byte
             R_1j = pubkey_gen(r_1j, compressed = True)
             # Add this newly generated keypair to the lists
