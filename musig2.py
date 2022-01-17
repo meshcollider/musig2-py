@@ -302,7 +302,7 @@ def main():
             # Generate a secret key
             r_1j = seckey_gen(force_even_y = False)
             # R_1j will be in 33-byte compressed key form with a parity byte
-            R_1j = pubkey_gen(r_1j, compressed = True)
+            R_1j = pubkey_gen(r_1j, compressed=True)
             # Add this newly generated keypair to the lists
             nonce_secrets.append(r_1j)
             nonces += R_1j
@@ -345,7 +345,7 @@ def main():
             print("Error: mismatch between number of nonces and number of public keys.")
             quit()
         aggregated_nonce_points = aggregate_nonces(public_nonce_list)
-        aggregated_nonce_bytes = [bytes_from_point(R, compressed = True) for R in aggregated_nonce_points]
+        aggregated_nonce_bytes = [bytes_from_point(R, compressed=True) for R in aggregated_nonce_points]
         b = hash_nonces(combined_key_bytes, aggregated_nonce_bytes, message)
         R = compute_R(aggregated_nonce_points, b)
         R_bytes = bytes_from_point(R)

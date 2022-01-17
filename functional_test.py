@@ -10,9 +10,9 @@ sig = ''
 X = b''
 
 def create_dirs():
-    if os.path.exists('musig2-test'):
-        shutil.rmtree('musig2-test')
-    os.mkdir('musig2-test')
+    if os.path.exists("musig2-test"):
+        shutil.rmtree("musig2-test")
+    os.mkdir("musig2-test")
     for child in children:
         os.mkdir(f"musig2-test/{child}")
         musig2.write_bytes("hello world\n".encode(), f"musig2-test/{child}/message")
@@ -79,6 +79,17 @@ def do_verify():
     stdout, _ = one.communicate()
     print(stdout.decode())
 
+def remove_single_use_files():
+    for child in children:
+        if os.path.exists(f"musig2-test/{child}/s_values"):
+            os.remove(f"musig2-test/{child}/s_values")
+        if os.path.exists(f"musig2-test/{child}/public_nonces"):
+            os.remove(f"musig2-test/{child}/public_nonces")
+
+def cleanup():
+    if os.path.exists("musig2-test"):
+        shutil.rmtree("musig2-test")
+
 def main():
 
     create_dirs()
@@ -88,6 +99,15 @@ def main():
     aggregate_signatures()
     do_verify()
 
+    remove_single_use_files()
+
+    # Sign a second message with the same public keys
+    gen_nonces()
+    do_sign()
+    aggregate_signatures()
+    do_verify()
+
+    cleanup()
 
 
 if __name__ == "__main__":
