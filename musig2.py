@@ -2,7 +2,7 @@ import hashlib
 import os
 import secrets
 import sys
-from typing import Tuple, Optional
+from typing import List, Optional, Tuple
 
 # secp256k1 finite field order (p) and group order (n)
 p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
@@ -135,16 +135,15 @@ def read_bytes(filename: str) -> bytes:
         quit()
     return read_bytes
 
-def write_bytes_list_to_hex(bytes_list: list[bytes], filename: str) -> bool:
-    if os.path.isfile(filename):
-        os.remove(filename)
+def write_bytes_list_to_hex(bytes_list: List[bytes], filename: str) -> bool:
+    # Opening with 'w' will overwrite the file if it exists
     with open(filename, 'w') as f:
         for byte_string in bytes_list:
             if not f.write(f"{byte_string.hex()}\n") > 0:
                 return False
     return True
 
-def read_bytes_from_hex_list(filename: str) -> list[bytes]:
+def read_bytes_from_hex_list(filename: str) -> List[bytes]:
     if not os.path.isfile(filename):
         print(f"Error: file {filename} does not exist.")
         quit()
@@ -182,7 +181,7 @@ def is_second_unique_key(key_list, public_key):
     return False
 
 # Takes a list of public keys, and another key, and creates the aggregation coefficient for that key
-def key_agg_coeff(key_set: list[bytes], public_key: bytes) -> int:
+def key_agg_coeff(key_set: List[bytes], public_key: bytes) -> int:
     # Sort the set of keys in lexicographical order
     sorted_keys = sorted(key_set)
     # If this is the second unique key in the list, we optimise by using coefficient 1
@@ -197,7 +196,7 @@ def key_agg_coeff(key_set: list[bytes], public_key: bytes) -> int:
 
 ########## MUSIG2 FUNCTIONS ##########
 
-def aggregate_public_keys(public_key_list: list[bytes], own_key: Optional[bytes]) -> Tuple[Point, int]:
+def aggregate_public_keys(public_key_list: List[bytes], own_key: Optional[bytes]) -> Tuple[Point, int]:
     aggregate_key = None
     own_coeff = 0
     for key_bytes in public_key_list:
@@ -221,7 +220,7 @@ def aggregate_public_keys(public_key_list: list[bytes], own_key: Optional[bytes]
         assert own_coeff > 0
     return aggregate_key, own_coeff
 
-def aggregate_nonces(nonces_to_aggregate: list[bytes]) -> list[Point]:
+def aggregate_nonces(nonces_to_aggregate: List[bytes]) -> List[Point]:
     # Every nu nonces are a set corresponding to one signer
     aggregated_nonces = []
     for j in range(nu):
@@ -237,7 +236,7 @@ def aggregate_nonces(nonces_to_aggregate: list[bytes]) -> list[Point]:
         aggregated_nonces.append(R_j)
     return aggregated_nonces
 
-def hash_nonces(agg_pubkey: bytes, nonces: list[bytes], msg: bytes) -> int:
+def hash_nonces(agg_pubkey: bytes, nonces: List[bytes], msg: bytes) -> int:
     bytes_to_hash = b''.join(nonces) + agg_pubkey + msg
     hash_bytes = tagged_hash("MuSig/noncecoef", bytes_to_hash)
     b = int_from_bytes(hash_bytes) % n
@@ -249,7 +248,7 @@ def chall_hash(agg_pubkey: bytes, R: bytes, msg: bytes) -> int:
     hash_bytes = tagged_hash("BIP0340/challenge", bytes_to_hash)
     return int_from_bytes(hash_bytes)
 
-def compute_R(nonces: list[Point], b: int) -> Point:
+def compute_R(nonces: List[Point], b: int) -> Point:
     R = None
     for j in range(nu):
         R_j = point_mul(nonces[j], (b**j) % n)
@@ -257,7 +256,7 @@ def compute_R(nonces: list[Point], b: int) -> Point:
     assert not is_infinite(R)
     return R
 
-def compute_s(chall: int, secret: bytes, coeff: int, nonce_secrets: list[bytes], b: int) -> int:
+def compute_s(chall: int, secret: bytes, coeff: int, nonce_secrets: List[bytes], b: int) -> int:
     # s = c*a_1*x_1 + \sum{ r_1,j * b^{j-1} }
     s = (chall * coeff * int_from_bytes(secret)) % n
     for j in range(nu):
